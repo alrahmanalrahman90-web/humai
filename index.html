@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>LOVE YOU</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27%3E%3Ctext y=%27.9em%27 font-size=%2790%27%3E%F0%9F%92%99%3C/text%3E%3C/svg%3E">
+<style>
+:root{color-scheme:dark;--bg:#000}
+html,body{height:100%;margin:0;background:var(--bg);overflow:hidden}
+canvas{display:block;width:100%;height:100%}
+.credit{position:fixed;left:0;right:0;bottom:0;padding:0 0 calc(10px + env(safe-area-inset-bottom,0px));text-align:center;color:rgba(255,255,255,.55);font:12px/1 "Segoe UI",Arial,Helvetica,sans-serif;letter-spacing:.12em;pointer-events:none}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="credit">Rahman</div>
+<script>
+const CENTER_TEXT = "Humai", ROWS = 26, XSTRETCH = 1.1;
+const TONES = ["#2a82f0", "#9fd0ff", "#1a64d8", "#3a96ff"];
+const cv = document.getElementById("c"), ctx = cv.getContext("2d");
+let W, H, R, items, dpr, cSize, cW;
+
+let seed = 5;
+const rnd = () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+  t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+
+const cache = {};
+function sprite(text, size, tone) {
+  const k = text + size + tone;
+  if (cache[k]) return cache[k];
+  const font = `${size}px "Segoe UI", Arial, Helvetica, sans-serif`;
+  const m = document.createElement("canvas").getContext("2d");
+  m.font = font;
+  const tw = Math.ceil(m.measureText(text).width), pad = 2;
+  const c = document.createElement("canvas");
+  c.width = tw + pad * 2; c.height = Math.ceil(size * 1.3);
+  const g = c.getContext("2d");
+  g.font = font; g.textBaseline = "middle"; g.fillStyle = TONES[tone];
+  g.fillText(text, pad, c.height / 2);
+  return cache[k] = { c, tw };
+}
+
+const inside = (x, y) => Math.pow(x * x + y * y - 1, 3) - x * x * y * y * y <= 0;
+
+function build() {
+  dpr = Math.min(window.devicePixelRatio || 1, 2);
+  W = cv.width = Math.round(innerWidth * dpr);
+  H = cv.height = Math.round(innerHeight * dpr);
+  for (const k in cache) delete cache[k];
+  seed = 5; items = [];
+  R = Math.min(W / (2.3 * XSTRETCH * 1.04), H / 2.4);
+  const rh = R * 2.3 / ROWS;
+
+  // "Humai" besar di tengah, seperti pada gambar
+  cSize = Math.round(R * 0.17);
+  const m = document.createElement("canvas").getContext("2d");
+  m.font = `bold ${cSize}px Georgia, "Times New Roman", serif`;
+  cW = m.measureText(CENTER_TEXT).width;
+  const exW = cW / 2 + rh * 0.8, exH = cSize * 0.75;
+
+  let r = 0;
+  for (let py = -1.15 * R; py < 1.12 * R; py += rh, r++) {
+    const ny = -py / R + 0.1, segs = [];
+    let st = null;
+    for (let x = -1.4 * R; x <= 1.4 * R; x += 3) {
+      const ins = inside(x / (R * XSTRETCH), ny);
+      if (ins && st === null) st = x;
+      else if (!ins && st !== null) { segs.push([st, x]); st = null; }
+    }
+    // satu ukuran per baris -> rapi
+    const size = Math.max(7, Math.round(rh * [0.7, 0.82, 0.7, 0.9][r % 4]));
+    const upper = size >= rh * 0.8;
+    const rowPh = rnd() * 6.28, rowSp = 0.25 + rnd() * 0.25;
+    for (let [a, b] of segs) {
+      a += rh * 0.3; b -= rh * 0.3;
+      const row = []; let cur = a;
+      for (;;) {
+        const text = upper ? (rnd() < 0.7 ? "LOVE YOU" : "Love You") : (rnd() < 0.6 ? "love you" : "Love You");
+        const tone = rnd() < 0.12 ? 1 : [0, 0, 2, 3][Math.floor(rnd() * 4)];
+        const s = sprite(text, size, tone);
+        if (cur + s.tw > b) break;
+        row.push({ s, x0: cur }); cur += s.tw + rh * 0.4;
+      }
+      if (!row.length) continue;
+      const extra = (b - (cur - rh * 0.4)) / row.length;
+      row.forEach((o, i) => {
+        const x = o.x0 + o.s.tw / 2 + extra * (i + 0.5);
+        const dim = (Math.abs(py) < exH && Math.abs(x) - o.s.tw / 2 < exW) ? 0.2 : 1; // redupkan tulisan di belakang Humai
+        items.push({ s: o.s.c, x, y: py, amp: 3 * dpr, sp: rowSp, ph: rowPh, al: (0.75 + rnd() * 0.25) * dim });
+      });
+    }
+  }
+}
+
+function frame(ms) {
+  const t = ms / 1000, cx = W / 2, cy = H / 2;
+  ctx.globalAlpha = 1; ctx.fillStyle = "#000"; ctx.fillRect(0, 0, W, H);
+  for (const it of items) {
+    const x = it.x + it.amp * Math.sin(t * it.sp + it.ph); // geser horizontal per baris
+    ctx.globalAlpha = it.al;
+    ctx.drawImage(it.s, Math.round(cx + x - it.s.width / 2), Math.round(cy + it.y - it.s.height / 2));
+  }
+  ctx.globalAlpha = 1; ctx.fillStyle = "#fff";
+  ctx.font = `bold ${cSize}px Georgia, "Times New Roman", serif`;
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText(CENTER_TEXT, cx, cy);
+  requestAnimationFrame(frame);
+}
+
+let rt;
+addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(build, 150); });
+build();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
